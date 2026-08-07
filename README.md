@@ -1,6 +1,7 @@
-<div align="center">
-<h1>Online Video Depth Anything: Temporally-Consistent Depth Prediction with Low Memory Consumption</h1>
-  
+# Online Video Depth Anything: Temporally-Consistent Depth Prediction with Low Memory Consumption</h1>
+
+Original authors:
+
 [**Johann-Friedrich Feiden**](https://scholar.google.com/citations?user=fV6PWhQAAAAJ&hl=de&oi=ao) · [**Tim Küchler**](https://scholar.google.com/citations?user=6Z_CcEsAAAAJ&hl=de&oi=ao) · [**Denis Zavadski**](https://scholar.google.com/citations?user=S7mDg00AAAAJ&hl=de)  · [**Bogdan Savchynskyy**](https://scholar.google.com/citations?hl=de&user=nvycljAAAAAJ)
 <br>
 [**Carsten Rother**](https://scholar.google.com/citations?user=N_YNMIMAAAAJ&hl=de)
@@ -10,9 +11,13 @@ Heidelberg University, Germany
 
 <a href="https://arxiv.org/abs/2510.09182"><img src='https://img.shields.io/badge/arXiv-Online Video Depth Anything-red' alt='Paper PDF'></a>
 <a href='https://friedfeid.github.io/oVDA-website/'><img src='https://img.shields.io/badge/Project_Page-Online Video Depth Anything-green' alt='Project Page'></a>
-</div>
 
-</div>
+### Custom changes:
+- converted to python version 3.12, updated pyproject.toml to be used with package managers like uv
+- depreciated requirements.txt
+- directly using `matplotlib.colormaps["Spectral"]` in [loading_utils.py](./src/utils/loading_utils.py)
+
+### Original Readme are as follows:
 
 We present **Online Video Depth Anything** (oVDA), a model based on [Video Depth Anything](https://videodepthanything.github.io) for predicting detailed, scale- and shift-invariant depth for arbitrary long videos in an online setting, even on edge devices. The key innovation is to employ techniques from Large Language Models (LLMs), namely, caching latent features during inference and masking frames at training. Our oVDA method outperforms all competing online video depth estimation methods in both accuracy and VRAM usage. Low VRAM usage is particularly important for deployment on edge devices. We demonstrate that oVDA runs at 42 FPS on an NVIDIA A100 and at 20 FPS on an NVIDIA Jetson edge device. We will release both, code and compilation scripts, making oVDA easy to deploy on low-power hardware.
 
@@ -79,6 +84,10 @@ Download the checkpoints listed [here](#pre-trained-models) and put them under t
 We provide a demo notebook as well as a .py file. Usage:
 ```bash
 python3 run.py --input_video ./assets/example_videos/Cars_and_Gasstation.mp4 --output_dir ./outputs
+```
+my custom version:
+```bash
+uv run python run.py --input_video ./assets/example_videos/Cars_and_Gasstation.mp4 --output_dir ./outputs
 ```
 
 Options:

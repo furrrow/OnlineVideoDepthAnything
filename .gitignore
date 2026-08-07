@@ -13,3 +13,7 @@ __pycache__/
 .vscode/
 outputs/
 old_builds/
+*.egg-info/
+
+# misc
+.python-version

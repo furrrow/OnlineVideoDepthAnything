@@ -1,0 +1,21 @@
+[project]
+name = "onlinevideodepthanything"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "opencv-python",
+    "matplotlib",
+    "imageio",
+    "imageio-ffmpeg",
+    "xformers",
+    "einops",
+    "natsort",
+    "tifffile",
+    "easydict",
+    "tqdm",
+    "jupyter",
+    "onnx",
+    "onnxruntime",
+]

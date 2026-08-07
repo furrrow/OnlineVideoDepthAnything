@@ -6,7 +6,7 @@ import os
 from natsort import natsorted
 import imageio.v3 as iio
 import tifffile
-import matplotlib.cm as cm
+import matplotlib
 
 from src.models.utils.preprocessing import VideoPreprocessor
 
@@ -35,14 +35,14 @@ def save_side_by_side(original, pred_color, out_path, fps=20):
 
 def colorize_pred(pred):
     """Pred [T,H,W] oder [T,H,W,1] → färbiges uint8 Video."""
-    import matplotlib.cm as cm
 
     if pred.ndim == 4 and pred.shape[-1] == 1:
         pred = pred[..., 0]
 
     vmin = float(pred.min())
     vmax = float(pred.max())
-    cmap = cm.get_cmap("Spectral")
+    # cmap = cm.get_cmap("Spectral")
+    cmap = matplotlib.colormaps["Spectral"]
 
     frames = []
     for frame in pred:
@@ -135,7 +135,8 @@ def save_video_mp4(video: np.ndarray, path: str, fps=20):
         (w, h)
     )
 
-    colormap = cm.get_cmap('Spectral')
+    # colormap = cm.get_cmap('Spectral')
+    colormap = matplotlib.colormaps["Spectral"]
 
     for frame in video:
         # Normalize globally
