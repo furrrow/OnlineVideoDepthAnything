@@ -1,4 +1,6 @@
 import cv2
+from tqdm import tqdm
+
 cv2.setNumThreads(1)
 import numpy as np
 import glob
@@ -33,14 +35,14 @@ def save_side_by_side(original, pred_color, out_path, fps=20):
     writer.release()
 
 
-def colorize_pred(pred):
+def colorize_pred(pred, vmin=None, vmax=None):
     """Pred [T,H,W] oder [T,H,W,1] → färbiges uint8 Video."""
 
     if pred.ndim == 4 and pred.shape[-1] == 1:
         pred = pred[..., 0]
 
-    vmin = float(pred.min())
-    vmax = float(pred.max())
+    vmin = float(pred.min()) if vmin is None else vmin
+    vmax = float(pred.max()) if vmax is None else vmax
     # cmap = cm.get_cmap("Spectral")
     cmap = matplotlib.colormaps["Spectral"]
 
@@ -149,6 +151,21 @@ def save_video_mp4(video: np.ndarray, path: str, fps=20):
         colored_bgr = (colored * 255).astype(np.uint8)[..., ::-1]
 
         writer.write(colored_bgr)
+
+    writer.release()
+
+def save_depth_video_mp4(video: np.ndarray, path: str, fps=20):
+    h, w = video.shape[1], video.shape[2]
+
+    writer = cv2.VideoWriter(
+        path,
+        cv2.VideoWriter_fourcc(*'mp4v'),
+        fps,
+        (w, h)
+    )
+
+    for frame in tqdm(video):
+        writer.write(frame)
 
     writer.release()
 

@@ -222,8 +222,9 @@ class onlineVideoDepthAnything(nn.Module):
             depths = []
             times = []
             with torch.no_grad():
-                for i in tqdm(range(prepared_frames.shape[1])):
+                for i in tqdm(range(prepared_frames.shape[1])): # prepared_frames: torch.Size([1, 699, 3, 518, 924])
                     input_frame = prepared_frames[:, i, :, :, :].unsqueeze(dim=1).to(device)
+                    # print(f"input_frame.shape: {input_frame.shape}") # torch.Size([1, 1, 3, 518, 924])
                     depth_pred, output_cache = self.forward(
                                                                 input_frame,
                                                                 input_cache=input_cache,
