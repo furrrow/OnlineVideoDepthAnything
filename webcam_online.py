@@ -153,6 +153,7 @@ def main():
         kind=stream_type,
         video_path=video_path,
         webcam_index=webcam_index,
+        # fps_request=5,
         yarp_port_name=yarp_port,
     )
     print(f"Opening source: {stream_type}")
@@ -166,8 +167,7 @@ def main():
 
     stop_processing = False
 
-
-
+    prev_time = time.time()
     try:
         with torch.inference_mode(), torch.autocast("cuda", dtype=torch.bfloat16):
             while stop_processing is not True:
@@ -179,10 +179,18 @@ def main():
                 if stream_buffer.status == FrameStatus.EOS:
                     # End of stream for video/webcam or closed YARP port.
                     break
+                # Calculate FPS
+                current_time = time.time()
+                fps = 1 / (current_time - prev_time)
+                prev_time = current_time
+
                 frame_rgb = stream_buffer.frame
                 pred_depth = predict_depth(model, frame_rgb, device)
                 pred_color = colorize_pred(pred_depth[0], vmin=0, vmax=20)
                 if viz_results:
+                    # Display FPS
+                    cv2.putText(pred_color,f"FPS: {fps:.1f}", (10, 30), cv2.FONT_HERSHEY_SIMPLEX,
+                        1,(0, 255, 0),2)
                     cv2.imshow(
                         "Livestream", cv2.cvtColor(pred_color, cv2.COLOR_RGB2BGR)
                     )

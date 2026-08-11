@@ -68,11 +68,13 @@ class InputStreamHandler:
         kind: str,
         video_path: Optional[str] = None,
         webcam_index: int = 0,
+        fps_request: int = 0,
         yarp_port_name: str = "/depthCamera/rgbImage:i",
     ) -> None:
         self.kind = kind
         self.video_path = video_path
         self.webcam_index = webcam_index
+        self.fps_request = fps_request
         self.yarp_port_name = yarp_port_name
 
         self._cap: Optional[cv2.VideoCapture] = None
@@ -93,6 +95,8 @@ class InputStreamHandler:
             if not cap.isOpened():
                 raise RuntimeError(f"Failed to open webcam index {self.webcam_index}")
             self._cap = cap
+            if self.fps_request > 0:
+                cap.set(cv2.CAP_PROP_FPS, self.fps_request)
         elif kind == "yarp":
             try:
                 import yarp
