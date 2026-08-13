@@ -15,7 +15,7 @@ Heidelberg University, Germany
 ### Custom changes:
 - converted to python version 3.12, updated pyproject.toml to be used with package managers like uv
 - depreciated requirements.txt
-- directly using `matplotlib.colormaps["Spectral"]` in [loading_utils.py](./src/utils/loading_utils.py)
+- directly using `matplotlib.colormaps["Spectral"]` in [loading_utils.py](OnlineVideoDepthAnything/utils/loading_utils.py)
 
 ### Original Readme are as follows:
 

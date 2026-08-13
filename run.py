@@ -5,8 +5,8 @@ import yaml
 import torch
 import numpy as np
 
-from src.models.video_depth import onlineVideoDepthAnything
-from src.utils.loading_utils import load_video_as_numpy, save_video_mp4, save_predictions_tiff, save_side_by_side, colorize_pred
+from OnlineVideoDepthAnything.models.video_depth import onlineVideoDepthAnything
+from OnlineVideoDepthAnything.utils.loading_utils import load_video_as_numpy, save_video_mp4, save_predictions_tiff, save_side_by_side, colorize_pred
 
 os.environ["OMP_NUM_THREADS"] = "1"
 os.environ["MKL_NUM_THREADS"] = "1"

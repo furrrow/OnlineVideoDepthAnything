@@ -10,7 +10,7 @@ import imageio.v3 as iio
 import tifffile
 import matplotlib
 
-from src.models.utils.preprocessing import VideoPreprocessor
+from OnlineVideoDepthAnything.models.utils.preprocessing import VideoPreprocessor
 
 def save_side_by_side(original, pred_color, out_path, fps=20):
     """

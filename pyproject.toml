@@ -1,5 +1,5 @@
 [project]
-name = "onlinevideodepthanything"
+name = "OnlineVideoDepthAnything"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
@@ -18,4 +18,11 @@ dependencies = [
     "jupyter",
     "onnx",
     "onnxruntime",
+    "custom_utils"
 ]
+
+[tool.setuptools.packages.find]
+where = ["."] # Finds 'OnlineVideoDepthAnything' in the current directory
+
+[tool.uv.sources]
+custom_utils = { workspace = true }
