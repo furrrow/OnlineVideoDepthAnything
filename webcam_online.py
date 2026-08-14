@@ -11,10 +11,8 @@ from PIL import Image
 
 from models.utils.preprocessing import VideoPreprocessor
 from models.video_depth import onlineVideoDepthAnything
-from src.utils.loading_utils import load_video_as_numpy, save_video_mp4, save_predictions_tiff, save_side_by_side, \
-    colorize_pred, save_depth_video_mp4
-
-from stream_handler import FrameStatus, InputStreamHandler
+from OnlineVideoDepthAnything.utils.loading_utils import colorize_pred, save_depth_video_mp4
+from custom_utils.stream_handler import FrameStatus, InputStreamHandler
 
 @torch.no_grad()
 def predict_depth(model:onlineVideoDepthAnything, frame:np.ndarray, device, preprocess_device='cpu', input_size=518, fp32=False,
@@ -33,8 +31,6 @@ def predict_depth(model:onlineVideoDepthAnything, frame:np.ndarray, device, prep
             Defining the rought resolution for processing. The exact Resolution will be automatically calculated.
     :param fp32: bool, default=False
             Defining if the model is run in fp32 or fp16 (if False). Since fp32 is only marginally better, we recommend to use fp16.
-    :param print_process_res: bool, default=False
-            Prints out the resolution the preprocessing has resized the original input to.
     :param output_raw: bool, default=False
             Returns the original prediction of oVDA. Will be in the resolution of the preprocessed input video. If set to False,
             the depth prediction is resized to the original input video size
@@ -65,7 +61,7 @@ def predict_depth(model:onlineVideoDepthAnything, frame:np.ndarray, device, prep
     print_resize_warining = False
     cache_size = 0
 
-    mask_indices = torch.tensor(list(range(1, model.cache_size))).to(device)
+    mask_indices = torch.tensor(list(range(1, model.max_cache_size))).to(device)
     input_position = torch.tensor([0, 1]).to(device)
 
     input_cache = model.setup_cache(h, w, device)
@@ -185,7 +181,8 @@ def main():
                 prev_time = current_time
 
                 frame_rgb = stream_buffer.frame
-                pred_depth = predict_depth(model, frame_rgb, device)
+                # pred_depth = predict_depth(model, frame_rgb, device)
+                pred_depth = model.infer_depth_streaming(frame_rgb, device=device, preprocess_device="cpu")
                 pred_color = colorize_pred(pred_depth[0], vmin=0, vmax=20)
                 if viz_results:
                     # Display FPS

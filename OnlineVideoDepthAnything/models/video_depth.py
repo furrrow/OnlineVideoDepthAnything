@@ -10,6 +10,9 @@ import torch.nn as nn
 import numpy as np
 import os
 
+from numpy import ndarray
+from torch import Tensor
+
 from .utils.preprocessing import VideoPreprocessor
 from .dinov2 import DINOv2
 from .modules.dpt_temporal import DPTHeadTemporalCrossAtt
@@ -66,12 +69,24 @@ class onlineVideoDepthAnything(nn.Module):
         }
 
         self.encoder = encoder
-        self.cache_size = cache_size
+        self.cache_size = 0
+        self.max_cache_size = cache_size
         use_xformers = use_xformers
         self.pretrained = DINOv2(model_name=encoder)
         
         self.head = DPTHeadTemporalCrossAtt(self.pretrained.embed_dim, features, use_bn, out_channels=out_channels, use_clstoken=use_clstoken, cache_size=cache_size,
                                                 pe=pe, use_xformers=use_xformers)
+        self.video_processor = None
+        self.input_cache = None
+        self.mask_indices = torch.tensor(list(range(1, self.max_cache_size)))
+        self.input_position = torch.tensor([0, 1])
+
+    def reset(self):
+        self.cache_size = 0
+        self.video_processor = None
+        self.input_cache = None
+        self.mask_indices = torch.tensor(list(range(1, self.max_cache_size)))
+        self.input_position = torch.tensor([0, 1])
 
     @torch.no_grad()
     def forward(self, x, input_cache, mask_indices, input_position):
@@ -88,7 +103,7 @@ class onlineVideoDepthAnything(nn.Module):
             Dictionary of torch.Tensors containing the cached frames
         mask_indices : torch.Tensor
             Tensor of indices which should be masked and not used for the Crossattention. 
-            This is only usefull for initialisation, when the cache is not full yet
+            This is only useful for initialisation, when the cache is not full yet
         input_position : torch.Tensor
             Tensor of int defining the position the current frame should be inputted. 
             When the cache is filled this is constant.
@@ -140,10 +155,10 @@ class onlineVideoDepthAnything(nn.Module):
         c3 = int(h/14 * w/14)
         c4 = int(math.ceil((h * 2)/14) * math.ceil((w * 2)/14))
 
-        input_cache1 = torch.zeros(1, 2, c1, self.cache_size, 192).to(device)
-        input_cache2 = torch.zeros(1, 2, c2, self.cache_size, 384).to(device)
-        input_cache3 = torch.zeros(1, 2, c3, self.cache_size, 64).to(device)
-        input_cache4 = torch.zeros(1, 2, c4, self.cache_size, 64).to(device)
+        input_cache1 = torch.zeros(1, 2, c1, self.max_cache_size, 192).to(device)
+        input_cache2 = torch.zeros(1, 2, c2, self.max_cache_size, 384).to(device)
+        input_cache3 = torch.zeros(1, 2, c3, self.max_cache_size, 64).to(device)
+        input_cache4 = torch.zeros(1, 2, c4, self.max_cache_size, 64).to(device)
 
         input_cache = {'c1': input_cache1, 'c2': input_cache2, 'c3': input_cache3, 'c4': input_cache4}
         return input_cache
@@ -184,14 +199,8 @@ class onlineVideoDepthAnything(nn.Module):
         """
         self.to(device)
         # Preprocessing of frames
-        frame_height, frame_width = frames[0].shape[:2]
-        ratio = max(frame_height, frame_width) / min(frame_height, frame_width)
-        if ratio > 1.78:  # VDA recommendet to process video with ratio smaller than 16:9 due to memory limitation
-            input_size = int(input_size * 1.777 / ratio)
-            input_size = round(input_size / 14) * 14
-        
-        pre = VideoPreprocessor(input_size=input_size, device=preprocess_device, ensure_multiple_of=14, keep_aspect_ratio=True, resize_method='lower_bound')
-        prepared_frames = pre.preprocess(frames)
+        frame_height, frame_width = self.setup_processor(frames, input_size, preprocess_device)
+        prepared_frames = self.video_processor.preprocess(frames)
 
         b, t, c, h, w = prepared_frames.size()
         if print_process_res:
@@ -206,17 +215,16 @@ class onlineVideoDepthAnything(nn.Module):
         print_resize_warining = False
         
         for batch in range(b):
-            
-            cache_size = 0
-            mask_indices = torch.tensor(list(range(1, self.cache_size))).to(device)
-            input_position = torch.tensor([0, 1]).to(device)
 
-            input_cache = self.setup_cache(h, w, device)
+            self.mask_indices = torch.tensor(list(range(1, self.max_cache_size)))
+            self.input_position = torch.tensor([0, 1])
+
+            self.input_cache = self.setup_cache(h, w, device)
             if not fp32:
-                for key in input_cache:
-                    input_cache[key] = input_cache[key].half()
-                    self.half()
-                    prepared_frames = prepared_frames.half()
+                for key in self.input_cache:
+                    self.input_cache[key] = self.input_cache[key].half()
+                self.half()
+                prepared_frames = prepared_frames.half()
 
             # Predict depths 
             depths = []
@@ -225,32 +233,15 @@ class onlineVideoDepthAnything(nn.Module):
                 for i in tqdm(range(prepared_frames.shape[1])): # prepared_frames: torch.Size([1, 699, 3, 518, 924])
                     input_frame = prepared_frames[:, i, :, :, :].unsqueeze(dim=1).to(device)
                     # print(f"input_frame.shape: {input_frame.shape}") # torch.Size([1, 1, 3, 518, 924])
-                    depth_pred, output_cache = self.forward(
-                                                                input_frame,
-                                                                input_cache=input_cache,
-                                                                mask_indices=mask_indices,
-                                                                input_position=input_position,
-                                                            )
+                    depth_pred, output_cache = self.forward(input_frame,
+                                                            input_cache=self.input_cache,
+                                                            mask_indices=self.mask_indices,
+                                                            input_position=self.input_position)
                     depth_pred = depth_pred.squeeze(1).unflatten(0, (1, 1))
                     depth_pred = depth_pred.squeeze(dim=0)
                     depths.append(depth_pred.cpu())
 
-                    # Update Cache
-                    if cache_size == self.cache_size - 1:
-                        for key in input_cache:
-                            input_cache[key] = torch.cat([input_cache[key][:, :, :, 1:cache_size, :], output_cache[key], torch.zeros_like(output_cache[key])], dim=3)
-                    else:
-                        for key in input_cache:
-                            input_cache[key][:, :, :, cache_size, :] = output_cache[key][:, :, :, 0, :]
-
-                    cache_size += 1
-                    cache_size = min(cache_size, self.cache_size - 1)
-
-                    remaining = list(range(cache_size, self.cache_size))
-                    padding = [self.cache_size - 1] * (cache_size - 1)
-                    
-                    mask_indices = torch.tensor(remaining + padding).to(device)
-                    input_position = torch.tensor([cache_size, cache_size]).to(device)
+                    self.update_cache(device, output_cache)
 
                 # The depths are in the process resolution.  
                 depths = torch.stack(depths, dim=1).float().numpy()
@@ -272,6 +263,127 @@ class onlineVideoDepthAnything(nn.Module):
         else: 
             return out_depth, (h, w)
 
+    def update_cache(self, device: str, output_cache: Tensor):
+        # Update Cache
+        if self.cache_size == self.max_cache_size - 1:
+            for key in self.input_cache:
+                self.input_cache[key] = torch.cat(
+                    [self.input_cache[key][:, :, :, 1:self.cache_size, :], output_cache[key],
+                     torch.zeros_like(output_cache[key])], dim=3)
+        else:
+            for key in self.input_cache:
+                self.input_cache[key][:, :, :, self.cache_size, :] = output_cache[key][:, :, :, 0, :]
+
+        self.cache_size += 1
+        self.cache_size = min(self.cache_size, self.max_cache_size - 1)
+
+        remaining = list(range(self.cache_size, self.max_cache_size))
+        padding = [self.max_cache_size - 1] * (self.cache_size - 1)
+
+        self.mask_indices = torch.tensor(remaining + padding).to(device)
+        self.input_position = torch.tensor([self.cache_size, self.cache_size]).to(device)
+
+    def setup_processor(self, single_frame: Tensor | ndarray, input_size, preprocess_device: str) -> tuple[
+        VideoPreprocessor, int, int]:
+        if len(single_frame.shape) == 4:
+            single_frame = single_frame[0]
+        frame_height, frame_width = single_frame.shape[:2]
+        ratio = max(frame_height, frame_width) / min(frame_height, frame_width)
+        if ratio > 1.78:  # VDA recommendet to process video with ratio smaller than 16:9 due to memory limitation
+            input_size = int(input_size * 1.777 / ratio)
+            input_size = round(input_size / 14) * 14
+
+        self.video_processor = VideoPreprocessor(input_size=input_size, device=preprocess_device, ensure_multiple_of=14,
+                                keep_aspect_ratio=True, resize_method='lower_bound')
+        return frame_height, frame_width
+
+    @torch.no_grad()
+    def infer_depth_streaming(self, frame, device, preprocess_device, input_size=518, fp32=False,
+                          output_raw=False, return_process_res=False):
+        """
+        oVDA Forward for Video
+        -----------------
+        Infers a stream of videos, takes one frame at a time, maintains and manages internal cache
+        heavily borrowing from onlineVideoDepthAnything.infer_video_depth()
+
+        Parameters
+        ----------
+        frame : torch.Tensor | np.ndarray
+            Input data of shape (H, W, Channels, )
+        device : str
+            torch device string of type: 'cuda:0' defining the cuda device to run on or 'cpu'
+        preprocess_device : str
+            torch device string defining the preprocess device. Can be a different one.
+        input_size : int, default=518
+            Defining the rought resolution for processing. The exact Resolution will be automatically calculated.
+        fp32 : bool, default=False
+            Defining if the model is run in fp32 or fp16 (if False). Since fp32 is only marginally better, we recommend to use fp16.
+        output_raw : bool, default=False
+            Returns the original prediction of oVDA. Will be in the resolution of the preprocessed input video. If set to False,
+            the depth prediction is resized to the original input video size
+        return_process_res : bool, default=False
+            Returns predictions and the process resolution. This is used for keeping track for downstream processing.
+
+        Returns
+        -------
+        out_depth : np.ndarray
+            predicted depth of shape (B, T, H, W)
+        """
+        self.to(device)
+        # Preprocessing of frames
+        frame_height, frame_width = self.setup_processor(frame, input_size, preprocess_device)
+        prepared_frame = self.video_processor.preprocess(frame)
+
+        b, t, c, h, w = prepared_frame.size()
+        assert b == 1, "streaming should handle one frame at a time..."
+
+        # Handle multiple videos
+        if output_raw:
+            out_depth = np.zeros((b, t, h, w))
+        else:
+            out_depth = np.zeros((b, t, frame_height, frame_width))
+
+        self.mask_indices.to(device)
+        self.input_position.to(device)
+
+        if self.input_cache is None:
+            self.input_cache = self.setup_cache(h, w, device)
+        if not fp32:
+            for key in self.input_cache:
+                self.input_cache[key] = self.input_cache[key].half()
+            self.half()
+            prepared_frame = prepared_frame.half()
+
+        # Predict depths
+        with torch.no_grad():
+            input_frame = prepared_frame.to(device)
+            # print(f"input_frame.shape: {input_frame.shape}") # torch.Size([1, 1, 3, 518, 924])
+            depth_pred, output_cache = self.forward(
+                input_frame,
+                input_cache=self.input_cache,
+                mask_indices=self.mask_indices,
+                input_position=self.input_position,
+            )
+            depth_pred = depth_pred.squeeze(1).unflatten(0, (1, 1))
+            depth_pred = depth_pred.squeeze(dim=0).cpu()
+
+            self.update_cache(device, output_cache)
+
+            # The depths are in the process resolution.
+            if output_raw:
+                depth_pred = depth_pred.float().numpy()
+                out_depth[0] = depth_pred
+            else:
+                if depth_pred[0].shape != (frame_height, frame_width):
+                    h, w = depth_pred[0].shape
+
+                out_depth = F.interpolate(depth_pred.unsqueeze(0), size=(frame_height, frame_width), mode='bilinear',
+                              align_corners=True).numpy()
+
+        if not return_process_res:
+            return out_depth[0]
+        else:
+            return out_depth[0], (h, w)
 
     @torch.no_grad()
     def lazy_forward(self, image_list, output_dir, device: str, preprocess_device: str, input_size: int = 518,
