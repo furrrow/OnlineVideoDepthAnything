@@ -9,7 +9,8 @@ from natsort import natsorted
 import imageio.v3 as iio
 import tifffile
 import matplotlib
-
+import matplotlib.pyplot as plt
+from matplotlib.colors import Normalize
 from OnlineVideoDepthAnything.models.utils.preprocessing import VideoPreprocessor
 
 def save_side_by_side(original, pred_color, out_path, fps=20):
@@ -35,26 +36,64 @@ def save_side_by_side(original, pred_color, out_path, fps=20):
     writer.release()
 
 
-def colorize_pred(pred, vmin=None, vmax=None):
-    """Pred [T,H,W] oder [T,H,W,1] → färbiges uint8 Video."""
-
+def colorize_pred(pred, vmin=None, vmax=None, add_colorbar=False):
     if pred.ndim == 4 and pred.shape[-1] == 1:
         pred = pred[..., 0]
 
-    vmin = float(pred.min()) if vmin is None else vmin
-    vmax = float(pred.max()) if vmax is None else vmax
-    # cmap = cm.get_cmap("Spectral")
+    single_frame = pred.ndim == 2
+
+    if single_frame:
+        pred = pred[None, ...]
+
+    vmin = float(pred.min()) if vmin is None else float(vmin)
+    vmax = float(pred.max()) if vmax is None else float(vmax)
+
     cmap = matplotlib.colormaps["Spectral"]
+    norm = matplotlib.colors.Normalize(vmin=vmin, vmax=vmax)
 
     frames = []
+
     for frame in pred:
-        norm = (np.clip(frame, vmin, vmax) - vmin) / (vmax - vmin + 1e-8)
-        rgb = cmap(norm)[..., :3] * 255
-        rgb = rgb.astype(np.uint8)
-        bgr = rgb[..., ::-1]  # RGB → BGR
+        rgb = cmap(norm(frame))[..., :3] * 255
+        bgr = rgb.astype(np.uint8)[..., ::-1]
         frames.append(bgr)
 
-    return np.stack(frames)
+    video = np.stack(frames)
+
+    # Add colorbar
+    if add_colorbar:
+        fig, ax = plt.subplots(figsize=(1.0, 5))
+        fig.subplots_adjust(left=0.2, right=0.7)
+
+        sm = matplotlib.cm.ScalarMappable(norm=norm, cmap=cmap)
+        sm.set_array([])
+
+        cbar = fig.colorbar(sm, cax=ax)
+        cbar.set_label("Depth")
+
+        fig.canvas.draw()
+        colorbar = np.asarray(fig.canvas.buffer_rgba())[..., :3]
+        plt.close(fig)
+
+        colorbar = colorbar[..., ::-1]  # RGB → BGR
+
+        colorbar = cv2.resize(
+            colorbar,
+            (colorbar.shape[1], video.shape[1])
+        )
+
+        video = np.concatenate(
+            [video, np.broadcast_to(
+                colorbar[None, ...],
+                (video.shape[0], *colorbar.shape)
+            )],
+            axis=2
+        )
+
+    if single_frame:
+        return video[0]
+
+    return video
 
 def load_video_as_numpy(path):
     """

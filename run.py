@@ -40,10 +40,10 @@ def process_single_video(video_path, args, model):
     out_side_path = os.path.join(args.output_dir, f"{vid_name}_{h}x{w}_sidebyside.mp4")
 
     pred_depth = pred[0]   # [T,H,W]
-    pred_color = colorize_pred(pred_depth)  # färbig für MP4 & side-by-side
+    pred_color = colorize_pred(pred_depth, add_colorbar=True)  # färbig für MP4 & side-by-side
 
     # Save prediction video
-    save_video_mp4(pred_depth, out_pred_path)
+    save_video_mp4(pred_color, out_pred_path)
 
     # Save raw depth
     if args.save_raw:
