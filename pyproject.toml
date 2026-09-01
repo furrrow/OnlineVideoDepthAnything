@@ -19,7 +19,6 @@ dependencies = [
     "onnx",
     "onnxruntime",
     "custom_utils",
-    "ptc-depth"
 ]
 
 [tool.setuptools.packages.find]
@@ -27,4 +26,3 @@ where = ["."] # Finds 'OnlineVideoDepthAnything' in the current directory
 
 [tool.uv.sources]
 custom_utils = { workspace = true }
-ptc-depth = { workspace = true }
